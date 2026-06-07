@@ -16,7 +16,6 @@ const API = {
     return d;
   },
   async put(endpoint, formData) {
-    // PHP doesn't parse multipart PUT natively — tunnel via POST with ?_method=PUT
     const sep = endpoint.includes('?') ? '&' : '?';
     const r = await fetch(this.base + endpoint + sep + '_method=PUT', {
       method: 'POST',
@@ -28,7 +27,6 @@ const API = {
     return d;
   },
   async delete(endpoint) {
-    // Tunnel DELETE via POST with ?_method=DELETE so PHP session cookie is sent
     const sep = endpoint.includes('?') ? '&' : '?';
     const r = await fetch(this.base + endpoint + sep + '_method=DELETE', {
       method: 'POST',
@@ -39,7 +37,6 @@ const API = {
     return d;
   },
   async json(endpoint, method, body) {
-    // Tunnel PUT/DELETE as POST with ?_method= so PHP session cookie is always sent
     let url = this.base + endpoint;
     let httpMethod = method;
     if (method === 'PUT' || method === 'DELETE') {
@@ -93,7 +90,6 @@ const UI = {
     if (id === 'menu')      MenuUI.load();
     if (id === 'admins')    AdminUI.load();
 
-    // close sidebar on mobile
     if (window.innerWidth <= 768) document.getElementById('sidebar').classList.remove('open');
   }
 };
@@ -143,10 +139,7 @@ function formatPrice(p) {
 // ── IMAGE SRC ─────────────────────────────────────
 function imgSrc(path) {
   if (!path) return null;
-  // Already a full URL (new uploads store http://localhost/cafe/Images/...)
   if (path.startsWith('http') || path.startsWith('/')) return path;
-  // Legacy DB records store relative path like "Images/ricebowl.png"
-  // These files physically live in C:/laragon/www/cafe/Images/
   return 'http://localhost/cafe/' + path;
 }
 
@@ -155,9 +148,9 @@ function imgSrc(path) {
 // ═══════════════════════════════════════════════════
 const Dashboard = {
   async load() {
-    document.getElementById('statMenu').textContent     = '…';
-    document.getElementById('statCategory').textContent = '…';
-    document.getElementById('statAdmin').textContent    = '…';
+    document.getElementById('statMenu').textContent     = '...';
+    document.getElementById('statCategory').textContent = '...';
+    document.getElementById('statAdmin').textContent    = '...';
     try {
       const [menus, cats, admins] = await Promise.all([
         API.get('menu.php'),
@@ -173,7 +166,6 @@ const Dashboard = {
       document.getElementById('statCategory').textContent = cats.length;
       document.getElementById('statAdmin').textContent    = admins.length;
 
-      // Recent 5 menu items
       const list = document.getElementById('dashMenuList');
       const recent = menus.slice(-5).reverse();
       if (!recent.length) {
@@ -182,7 +174,7 @@ const Dashboard = {
       }
       list.innerHTML = recent.map(m => `
         <div class="dash-menu-item">
-          <div class="dish-emoji">🍽️</div>
+          <div class="dish-icon">Menu</div>
           <div class="item-info">
             <div class="item-name">${m.MenuName}</div>
             <div class="item-cat">${m.CategoryName || 'Uncategorized'}</div>
@@ -206,8 +198,8 @@ const Dashboard = {
 // ═══════════════════════════════════════════════════
 const CatUI = {
   async load() {
-    const grid = document.getElementById('categoryGrid');
-    grid.innerHTML = `<div class="skeleton" style="height:160px;border-radius:12px"></div>`.repeat(4);
+    const list = document.getElementById('categoryGrid');
+    list.innerHTML = `<div class="skeleton cat-row-skeleton"></div>`.repeat(3);
     try {
       const cats = await API.get('category.php');
       State.categories = cats;
@@ -218,25 +210,25 @@ const CatUI = {
   },
 
   render(cats) {
-    const grid = document.getElementById('categoryGrid');
+    const list = document.getElementById('categoryGrid');
     if (!cats.length) {
-      grid.innerHTML = `<div class="empty-state"><span>🏷️</span>No categories yet. Add one!</div>`;
+      list.innerHTML = `<div class="empty-state">No categories yet. Add one!</div>`;
       return;
     }
-    grid.innerHTML = cats.map(c => `
-      <div class="cat-card">
-        <div class="cat-card-img">
+    list.innerHTML = cats.map(c => `
+      <div class="cat-row">
+        <div class="cat-row-img">
           ${c.ImagePath
-            ? `<img src="${imgSrc(c.ImagePath)}" alt="${c.CategoryName}">`
-            : '🏷️'}
+            ? `<img src="${imgSrc(c.ImagePath)}" alt="${escHtml(c.CategoryName)}">`
+            : `<span class="cat-row-img-placeholder">No Image</span>`}
         </div>
-        <div class="cat-card-body">
-          <div class="cat-card-name">${c.CategoryName}</div>
-          <div class="cat-card-meta">Added by ${c.AddedBy || 'system'}</div>
-          <div class="cat-card-actions">
-            <button class="btn-primary btn-sm" onclick="CatUI.openModal('${c.CategoryID}')">✏️ Edit</button>
-            <button class="btn-danger btn-sm" onclick="CatUI.confirmDelete('${c.CategoryID}','${escHtml(c.CategoryName)}')">🗑️</button>
-          </div>
+        <div class="cat-row-info">
+          <div class="cat-row-name">${escHtml(c.CategoryName)}</div>
+          <div class="cat-row-meta">Added by ${c.AddedBy || 'system'} &nbsp;&bull;&nbsp; ID: ${c.CategoryID}</div>
+        </div>
+        <div class="cat-row-actions">
+          <button class="btn-secondary btn-sm" onclick="CatUI.openModal('${c.CategoryID}')">Edit</button>
+          <button class="btn-danger btn-sm" onclick="CatUI.confirmDelete('${c.CategoryID}','${escHtml(c.CategoryName)}')">Delete</button>
         </div>
       </div>`).join('');
   },
@@ -278,10 +270,10 @@ const CatUI = {
     try {
       if (id) {
         await API.put(`category.php?id=${id}`, fd);
-        toast('Category updated ✓', 'success');
+        toast('Category updated', 'success');
       } else {
         await API.post('category.php', fd);
-        toast('Category added ✓', 'success');
+        toast('Category added', 'success');
       }
       this.closeModal();
       this.load();
@@ -306,10 +298,15 @@ const CatUI = {
 // ═══════════════════════════════════════════════════
 const MenuUI = {
   _all: [],
+  _sortCol: 'MenuName',
+  _sortDir: 1, // 1 = asc, -1 = desc
+  _filterCat: '',
+  _searchQ: '',
+  _selected: new Set(), // IDs yang dipilih via checkbox
 
   async load() {
-    const grid = document.getElementById('menuGrid');
-    grid.innerHTML = `<div class="skeleton" style="height:240px;border-radius:12px"></div>`.repeat(4);
+    const container = document.getElementById('menuGrid');
+    container.innerHTML = `<div class="skeleton" style="height:300px;border-radius:12px"></div>`;
     try {
       const [menus, cats] = await Promise.all([
         API.get('menu.php'),
@@ -318,8 +315,12 @@ const MenuUI = {
       State.menus      = menus;
       State.categories = cats;
       this._all        = menus;
-      this.render(menus);
+      this._filterCat  = '';
+      this._searchQ    = '';
+      this._selected   = new Set();
       this.populateCatSelect();
+      this.populateCatFilter();
+      this.renderTable();
     } catch(e) {
       toast('Failed to load menus', 'error');
     }
@@ -329,34 +330,199 @@ const MenuUI = {
     const sel = document.getElementById('menuCatID');
     sel.innerHTML = '<option value="">— Select category —</option>';
     State.categories.forEach(c => {
-      sel.innerHTML += `<option value="${c.CategoryID}">${c.CategoryName}</option>`;
+      sel.innerHTML += `<option value="${c.CategoryID}">${escHtml(c.CategoryName)}</option>`;
     });
   },
 
-  render(menus) {
-    const grid = document.getElementById('menuGrid');
-    if (!menus.length) {
-      grid.innerHTML = `<div class="empty-state"><span>🍽️</span>No menu items yet. Add one!</div>`;
-      return;
+  populateCatFilter() {
+    const sel = document.getElementById('menuCatFilter');
+    if (!sel) return;
+    sel.innerHTML = '<option value="">All Categories</option>';
+    State.categories.forEach(c => {
+      sel.innerHTML += `<option value="${c.CategoryID}">${escHtml(c.CategoryName)}</option>`;
+    });
+  },
+
+  getFiltered() {
+    let data = this._all.slice();
+    if (this._filterCat) {
+      data = data.filter(m => m.CategoryID === this._filterCat);
     }
-    grid.innerHTML = menus.map(m => `
-      <div class="menu-card">
-        <div class="menu-card-body">
-          ${m.CategoryName ? `<div class="menu-card-badge">${m.CategoryName}</div>` : ''}
-          <div class="menu-card-name">${m.MenuName}</div>
-          <div class="menu-card-price">${formatPrice(m.Price)}</div>
-          <div class="menu-card-desc">${m.ShortDesc || '<em style="color:var(--muted)">No description</em>'}</div>
-          <div class="menu-card-actions">
-            <button class="btn-primary btn-sm" onclick="MenuUI.openModal('${m.MenuID}')">✏️ Edit</button>
-            <button class="btn-danger btn-sm" onclick="MenuUI.confirmDelete('${m.MenuID}','${escHtml(m.MenuName)}')">🗑️</button>
-          </div>
-        </div>
-      </div>`).join('');
+    if (this._searchQ) {
+      const q = this._searchQ.toLowerCase();
+      data = data.filter(m =>
+        m.MenuName.toLowerCase().includes(q) ||
+        (m.CategoryName || '').toLowerCase().includes(q) ||
+        (m.ShortDesc || '').toLowerCase().includes(q)
+      );
+    }
+    const col = this._sortCol;
+    const dir = this._sortDir;
+    data.sort((a, b) => {
+      let av = a[col] ?? '';
+      let bv = b[col] ?? '';
+      if (col === 'Price') { av = Number(av); bv = Number(bv); }
+      else { av = String(av).toLowerCase(); bv = String(bv).toLowerCase(); }
+      if (av < bv) return -dir;
+      if (av > bv) return dir;
+      return 0;
+    });
+    return data;
+  },
+
+  setSort(col) {
+    if (this._sortCol === col) {
+      this._sortDir *= -1;
+    } else {
+      this._sortCol = col;
+      this._sortDir = 1;
+    }
+    this.renderTable();
   },
 
   search(q) {
-    const f = this._all.filter(m => m.MenuName.toLowerCase().includes(q.toLowerCase()));
-    this.render(f);
+    this._searchQ = q;
+    this.renderTable();
+  },
+
+  filterCat(catID) {
+    this._filterCat = catID;
+    this.renderTable();
+  },
+
+  sortIndicator(col) {
+    if (this._sortCol !== col) return '<span class="sort-icon">&#8597;</span>';
+    return this._sortDir === 1
+      ? '<span class="sort-icon active">&#8593;</span>'
+      : '<span class="sort-icon active">&#8595;</span>';
+  },
+
+  renderTable() {
+    const container = document.getElementById('menuGrid');
+    const data = this.getFiltered();
+
+    if (!data.length) {
+      container.innerHTML = `<div class="empty-state">No menu items found.</div>`;
+      return;
+    }
+
+    const allIds = data.map(m => m.MenuID);
+    const allChecked = allIds.length > 0 && allIds.every(id => this._selected.has(id));
+    const someChecked = this._selected.size > 0;
+
+    const cols = [
+      { key: 'MenuID',       label: 'ID' },
+      { key: 'MenuName',     label: 'Name' },
+      { key: 'Price',        label: 'Price' },
+      { key: 'CategoryName', label: 'Category' },
+      { key: 'ShortDesc',    label: 'Description' },
+      { key: 'AddedBy',      label: 'Added By' },
+    ];
+
+    container.innerHTML = `
+      ${someChecked ? `
+      <div class="bulk-bar">
+        <span class="bulk-count"><strong>${this._selected.size}</strong> item dipilih</span>
+        <div class="bulk-actions">
+          <button class="btn-secondary btn-sm" onclick="MenuUI.clearSelection()">Batal Pilih</button>
+          <button class="btn-danger btn-sm" onclick="MenuUI.confirmBulkDelete()"> Hapus Semua Terpilih</button>
+        </div>
+      </div>` : ''}
+      <div class="card table-card">
+        <table class="menu-table">
+          <thead>
+            <tr>
+              <th class="col-checkbox">
+                <input type="checkbox" class="row-checkbox" id="checkAll"
+                  ${allChecked ? 'checked' : ''}
+                  onchange="MenuUI.toggleAll(this.checked)"
+                  title="${allChecked ? 'Batalkan semua' : 'Pilih semua'}">
+              </th>
+              ${cols.map(c => `
+                <th class="sortable-th" onclick="MenuUI.setSort('${c.key}')">
+                  ${c.label} ${this.sortIndicator(c.key)}
+                </th>`).join('')}
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${data.map((m) => `
+              <tr class="${this._selected.has(m.MenuID) ? 'row-selected' : ''}">
+                <td class="col-checkbox">
+                  <input type="checkbox" class="row-checkbox"
+                    ${this._selected.has(m.MenuID) ? 'checked' : ''}
+                    onchange="MenuUI.toggleOne('${m.MenuID}', this.checked)">
+                </td>
+                <td><span class="row-num">${m.MenuID}</span></td>
+                <td><strong>${escHtml(m.MenuName)}</strong></td>
+                <td class="price-cell">${formatPrice(m.Price)}</td>
+                <td>${m.CategoryName ? `<span class="cat-badge">${escHtml(m.CategoryName)}</span>` : '<span style="color:var(--muted)">—</span>'}</td>
+                <td class="desc-cell">${m.ShortDesc ? escHtml(m.ShortDesc) : '<span style="color:var(--muted)">—</span>'}</td>
+                <td>${escHtml(m.AddedBy || '—')}</td>
+                <td>
+                  <div class="action-btns">
+                    <button class="btn-secondary btn-sm" onclick="MenuUI.openModal('${m.MenuID}')">Edit</button>
+                    <button class="btn-danger btn-sm" onclick="MenuUI.confirmDelete('${m.MenuID}','${escHtml(m.MenuName)}')">Delete</button>
+                  </div>
+                </td>
+              </tr>`).join('')}
+          </tbody>
+        </table>
+        <div class="table-footer">Showing ${data.length} of ${this._all.length} items${this._selected.size > 0 ? ` &nbsp;·&nbsp; <span style="color:var(--orange);font-weight:600">${this._selected.size} dipilih</span>` : ''}</div>
+      </div>`;
+  },
+
+  // ── CHECKBOX HELPERS ──────────────────────────
+  toggleOne(id, checked) {
+    if (checked) {
+      this._selected.add(id);
+    } else {
+      this._selected.delete(id);
+    }
+    this.renderTable();
+  },
+
+  toggleAll(checked) {
+    const data = this.getFiltered();
+    if (checked) {
+      data.forEach(m => this._selected.add(m.MenuID));
+    } else {
+      data.forEach(m => this._selected.delete(m.MenuID));
+    }
+    this.renderTable();
+  },
+
+  clearSelection() {
+    this._selected.clear();
+    this.renderTable();
+  },
+
+  confirmBulkDelete() {
+    if (this._selected.size === 0) return;
+    const count = this._selected.size;
+    confirmDelete(
+      `Hapus ${count} menu item yang dipilih? Tindakan ini tidak dapat dibatalkan.`,
+      async () => {
+        let successCount = 0;
+        let failCount = 0;
+        const ids = [...this._selected];
+        for (const id of ids) {
+          try {
+            await API.delete(`menu.php?id=${id}`);
+            successCount++;
+          } catch(e) {
+            failCount++;
+          }
+        }
+        this._selected.clear();
+        this.load();
+        if (failCount === 0) {
+          toast(`${successCount} menu item berhasil dihapus`, 'success');
+        } else {
+          toast(`${successCount} berhasil, ${failCount} gagal dihapus`, 'error');
+        }
+      }
+    );
   },
 
   openModal(id) {
@@ -401,10 +567,10 @@ const MenuUI = {
     try {
       if (id) {
         await API.put(`menu.php?id=${id}`, fd);
-        toast('Menu updated ✓', 'success');
+        toast('Menu updated', 'success');
       } else {
         await API.post('menu.php', fd);
-        toast('Menu added ✓', 'success');
+        toast('Menu added', 'success');
       }
       this.closeModal();
       this.load();
@@ -447,11 +613,13 @@ const AdminUI = {
     tbody.innerHTML = admins.map(a => `
       <tr>
         <td>${a.AdminID}</td>
-        <td><strong>${a.Username}</strong></td>
+        <td><strong>${escHtml(a.Username)}</strong></td>
         <td>${new Date(a.CreatedAt).toLocaleDateString('id-ID')}</td>
         <td>
-          <button class="btn-primary btn-sm" onclick="AdminUI.openModal('${a.AdminID}')">✏️ Edit</button>
-          <button class="btn-danger btn-sm" onclick="AdminUI.confirmDelete('${a.AdminID}','${escHtml(a.Username)}')">🗑️</button>
+          <div class="action-btns">
+            <button class="btn-secondary btn-sm" onclick="AdminUI.openModal('${a.AdminID}')">Edit</button>
+            <button class="btn-danger btn-sm" onclick="AdminUI.confirmDelete('${a.AdminID}','${escHtml(a.Username)}')">Delete</button>
+          </div>
         </td>
       </tr>`).join('');
   },
@@ -489,10 +657,10 @@ const AdminUI = {
     try {
       if (id) {
         await API.json(`admin_users.php?id=${id}`, 'PUT', { username, password });
-        toast('Admin updated ✓', 'success');
+        toast('Admin updated', 'success');
       } else {
         await API.json('admin_users.php', 'POST', { username, password });
-        toast('Admin added ✓', 'success');
+        toast('Admin added', 'success');
       }
       this.closeModal();
       this.load();
@@ -507,7 +675,7 @@ const AdminUI = {
         await API.delete(`admin_users.php?id=${id}`);
         toast('Admin deleted', 'info');
         this.load();
-      } catch(e) { toast(e.error || e.error || 'Delete failed', 'error'); }
+      } catch(e) { toast(e.error || 'Delete failed', 'error'); }
     });
   }
 };
@@ -551,14 +719,12 @@ async function logout() {
     document.getElementById('adminName').textContent = check.username;
     Dashboard.load();
   } catch(e) {
-    // If PHP not available, fall back to session storage check (dev mode)
     const user = sessionStorage.getItem('adminUser');
     if (!user) {
       window.location.href = 'login.php';
       return;
     }
     document.getElementById('adminName').textContent = user;
-    // Show a notice that backend is needed
-    toast('⚠️ Running without PHP backend — connect to MySQL for full functionality', 'error');
+    toast('Running without PHP backend — connect to server for full functionality', 'error');
   }
 })();

@@ -72,8 +72,8 @@
             <p>Open: 11:00 - 22:30</p>
             <p>Instagram: @d2_doubletwo</p>
         </div>
-        <div>
-            <iframe src="https://www.google.com/maps/embed?pb=!1m17!1m12!1m3!1d3989.0529342217023!2d104.0018282749654!3d1.1222982988669494!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m2!1m1!2zMcKwMDcnMjAuMyJOIDEwNMKwMDAnMTUuOSJF!5e0!3m2!1sen!2sid!4v1779804779308!5m2!1sen!2sid" width="600" height="450" style="border:0;" allowfullscreen="" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe>
+        <div class="map-container">
+            <iframe src="https://www.google.com/maps/embed?pb=!1m17!1m12!1m3!1d3989.0529342217023!2d104.0018282749654!3d1.1222982988669494!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m2!1m1!2zMcKwMDcnMjAuMyJOIDEwNMKwMDAnMTUuOSJF!5e0!3m2!1sen!2sid!4v1779804779308!5m2!1sen!2sid" width="600" height="450" style="border:0;" allowfullscreen="" loading="lazy" referrerpolicy="no-referrer-when-downgrade" allowfullscreen="" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe>
         </div>
     </div>
         
